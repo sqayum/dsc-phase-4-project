@@ -1,8 +1,8 @@
-# A. *Business Understanding*
+# Business Understanding
 
 *Gallup*, a global analytics and advice firm, plans to conduct a large-scale survey regarding public sentiment towards the political parties in the United States. In order to achieve this, they require a model that can rate the sentiment of a Tweet based on its content. Once training of the model has been completed, it is to be deployed as a sentiment analysis tool for that recieves data from the Twitter API.
 
-# B. *Data Understanding*
+# Data Understanding
 
 > *The [Sentiment140](http://help.sentiment140.com/home) dataset will be used to train the classification model. It is a collection of $1,600,000$ tweets, all of which are labelled with a corresponding value indicating sentiment.*
 
@@ -33,3 +33,35 @@ The heuristic outlined above was chosen to generate labels because it had previs
 > - *the model is highly accurate -- experimental results show that it predicts the sentiment of tweets with an *F1 Classification Accuracy* of $0.96$ [refer to [VADER: A Parsimonious Rule-based Model for Sentiment Analysis of Social Media Text](http://comp.social.gatech.edu/papers/icwsm14.vader.hutto.pdf) for more details]*
 
 In addition to obtaining more accurate labels, performing sentiment analysis with VADER will allow for the additional classification of tweets that express a neutral sentiment. Although tweets such as these were not considered during the construction of *Sentiment104*, the sheer number of tweets combined with the inaccuracy of the current labels makes it likely that a significant number of neutral tweets are present in the dataset. Thus, for the sake of producing a finer classification model, tweets classified as neutral by VADER will remain with that label throughout the remainder of this project.
+
+# Data Processing
+
+*An outline of the steps taken to process the textual data is shown below:*
+
+
+# Limitations & Future Work
+
+### Fine-Grained Sentiment Analysis
+
+Polarity can be categorized with greater precision. In the realm of politics, the degree of polarization is as important as polarity itself. As an example, consider the benefit of being able to use sentiment analysis to discern between hardline Republicans/Democrats versus their more moderate counterparts. Therefore it would be prudent to expand the categories of polarity. For example, a model could be trained to classify sentiment under the following polarities:
+- *Very Positive*
+- *Positive*
+- *Neutral*
+- *Negative*
+- *Very Negative*
+
+The upside of this approach is that powerful rule-based sentiment analyzers (e.g. VADER) are readily available for use in generating weakly-labeled data with finer grain polarity.
+
+### Emotion Detection
+
+Sentiment can also be categorized with greater precision. A better approach to surveying public sentiment would be to train a model to detect the emotions, rather than the general sentiment, expressed in a tweet. With respect to the political arena, this would provide invaluable information because it would allow trends in sentiment to be broken
+
+The downside of using natural language processing to classify emotions is that the meaning of individual words/phrases becomes more context-specific, and therefore, harder to classify. For example, some words that typically express anger, like "*bad*" or "*kill*", in one context (e.g. "*your product is so bad*" or "*your customer support is killing me*")  might also express happiness in some other context (e.g. "*this is bad ass*" or "*you're killing it*").
+
+### Identification of Domain-Specific Tweets
+
+Training a model to classify the sentiment of tweets, without regarding topic, results in the model having to utilize a very large vocabulary. If limited to a particular domain (American politics in this case), it is likely the model will perform better. Therefore, more emphasis needs to be placed on gathering tweets with content related to American politics. Alternatively, a separate model can be trained to specifically identify such tweets.
+
+### Utilizing Emoticon Data
+
+As discussed in *Part B*, the tweets that comprise the *Sentiment104* dataset had their emoticons stripped from them before being incorporated into the dataset. This leads to a signiicant shortcoming in our model, namely, that it does not account for emoticons when determining sentiment. This needs to be addressed because the emoticon feature is very informative when it comes to sentiment, especially with regard to Twitter data. This can easily be achieved by collecting a new set of tweets from the Twitter API, and adjusting text pre-processing such that emoticons are identified and kept as tokens before special characters are removed in general.
