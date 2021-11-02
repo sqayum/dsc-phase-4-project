@@ -1,3 +1,7 @@
+# Twitter Sentiment Analysis
+
+##### Author: **Suleyman Qayum**
+
 ## Business Understanding
 
 *Gallup*, a global analytics and advice firm, plans to conduct a large-scale survey regarding public sentiment towards the political parties in the United States. In order to achieve this, they require a model that can rate the sentiment of a Tweet based on its content. Once training of the model has been completed, it is to be deployed as a sentiment analysis tool for that recieves data from the Twitter API.
