@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import dataframe_image as dfi
 import matplotlib.pyplot as plt
 import seaborn as sns
 from nltk.probability import FreqDist
@@ -7,6 +8,8 @@ from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import validation_curve
 from matplotlib.gridspec import GridSpec
 from matplotlib.ticker import MultipleLocator
+from functools import reduce
+import re
 
 
 CONTRACTION_MAP = {
@@ -180,7 +183,6 @@ CONVERSATIONAL_ABBREVIATION_MAP = {
     "yw": "your welcome",
     "zomg": "oh my God"}
 
-
 TECHNICAL_ABBREVIATION_MAP = {
     "DM": "direct message",
     "CT": "cuttweet",
@@ -194,41 +196,74 @@ TECHNICAL_ABBREVIATION_MAP = {
     "YT": "YouTube"}
 
 
+def print_completion_message(*, start_msg=None, end_msg=None):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            nonlocal start_msg
+            nonlocal end_msg
+            arg_str = ', '.join([str(arg) for arg in args] + [f"{key}={value}" for key, value in kwargs.items()])
+            if start_msg is None:
+                start_msg = f"EXECUTING <{func.__name__}({arg_str})> ......"
+            print(f"{start_msg} ......", end='')
+            result = func(*args, **kwargs)
+            if end_msg is None:
+                end_msg = f" COMPLETE"
+            print(end_msg)
+            return result
+        return wrapper
+    return decorator
 
 
 
-def _gather_tokens(tokenized_documents, by_document=False):
+def _gather_tokens(tokenized_documents, *, by_document=False):
     for token_list in tokenized_documents:
         if by_document:
             token_list = set(token_list)
         for token in token_list:
             yield token
 
-def get_document_frequencies(corpus, label=None, *, N=None):
-    if label is not None:
-        corpus_tokens = corpus.loc[corpus["label"] == label, "tokens"].reset_index(drop=True)
+
+def _get_document_frequencies(corpus,
+                                   *,
+                                   document_col,
+                                   label_col,
+                                   label_name=None,
+                                   N=None):
+
+    if label_name is None:
+        tokenized_documents = corpus[document_col]
     else:
-        corpus_tokens = corpus.tokens
-        label = "ALL"
+        tokenized_documents = corpus.loc[corpus[label_col] == label_name, document_col].reset_index(drop=True)
 
-    if isinstance(corpus_tokens.values[0], str):
-        corpus_tokens = corpus_tokens.apply(str.split)
+    if isinstance(tokenized_documents.values[0], str):
+        tokenized_documents = tokenized_documents.apply(str.split)
 
-    gathered_tokens = _gather_tokens(corpus_tokens, by_document=True)
+    gathered_tokens = _gather_tokens(tokenized_documents, by_document=True)
     frequency_df = pd.DataFrame(FreqDist(gathered_tokens).items(), columns=['word', 'frequency'])
     frequency_df.sort_values('frequency', inplace=True)
-
     if N is None:
         N = corpus.shape[0]
-
     total_num_tokens = frequency_df["frequency"].sum()
     tokens = frequency_df["word"].tail(N)
     normalized_frequencies = [round((frequency / total_num_tokens), 3) for frequency in frequency_df["frequency"].tail(N)]
+
     return {token: frequency for token, frequency in zip(tokens, normalized_frequencies)}
 
 
-def plot_document_frequencies(corpus, label=None, *, N=20, figsize=None):
-    frequency_dict = get_document_frequencies(corpus, label, N=N)
+def plot_document_frequencies(corpus,
+                                  *,
+                                  document_col,
+                                  label_col,
+                                  label_name=None,
+                                  N=20,
+                                  figsize=None,
+                                  filepath=None):
+
+    frequency_dict = _get_document_frequencies(corpus,
+                                                      document_col=document_col,
+                                                      label_col=label_col,
+                                                      label_name=label_name,
+                                                      N=N)
     if figsize is None:
         fig, ax = plt.subplots(figsize=(15,15))
     else:
@@ -236,51 +271,60 @@ def plot_document_frequencies(corpus, label=None, *, N=20, figsize=None):
     tokens = list(frequency_dict.keys())
     normalized_frequencies = list(frequency_dict.values())
     ax.barh(tokens, normalized_frequencies)
-    ax.set(title=f'Normalized Document Frequencies ({label})')
+    ax.set(title=f'Normalized Document Frequencies ({label_name})')
     fig.tight_layout()
 
+    if filepath is not None:
+        fig.savefig(filepath)
 
-def plot_label_frequencies(corpus):
-    label_counts = corpus.groupby("label").count()["tokens"]
+
+def plot_label_frequencies(corpus,
+                              *,
+                              document_col,
+                              label_col,
+                              filepath=None):
+
+    label_counts = corpus.groupby(label_col).count()[document_col]
     label_frequencies = label_counts.apply(lambda count: count / label_counts.sum())
 
     fig, ax = plt.subplots(figsize=(8,7))
     ax.bar(label_frequencies.index, label_frequencies.values, width=0.5)
     ax.set(title="Label Frequencies (Normalized)", ylim=(0,0.5));
 
-
-def average_token_length(corpus):
-    if isinstance(corpus.tokens[0], str):
-        corpus.tokens = corpus.tokens.apply(str.split)
-    return round(corpus["tokens"].map(len).mean(), 2)
+    if filepath is not None:
+        fig.savefig(filepath)
 
 
-def get_corpus_stop_words(corpus, *,  threshold):
-    positive_frequency_dict = get_document_frequencies(corpus, "POSITIVE")
-    positive_stop_words = {word for word in positive_frequency_dict if positive_frequency_dict[word] >= threshold}
-
-    neutral_frequency_dict = get_document_frequencies(corpus, "NEUTRAL")
-    neutral_stop_words = {word for word in neutral_frequency_dict if neutral_frequency_dict[word] >= threshold}
-
-    negative_frequency_dict = get_document_frequencies(corpus, "NEGATIVE")
-    negative_stop_words = {word for word in negative_frequency_dict if negative_frequency_dict[word] >= threshold}
-
-    return (positive_stop_words & neutral_stop_words & negative_stop_words)
+def average_token_length(corpus, *, document_col):
+    if isinstance(corpus[document_col][0], str):
+        tokenized_documents = corpus[document_col].apply(str.split)
+    else:
+        tokenized_documents = corpus[document_col]
+    return round(tokenized_documents.map(len).mean(), 2)
 
 
 
-def plot_confusion_matrices(y_train_true, y_train_pred,
-                             y_validate_true, y_validate_pred,
-                             *,
-                             labels=None,
-                             sample_weights=None,
-                             normalize=None,
-                             cbar=False,
-                             figsize=None):
+def plot_confusion_matrices(y_train_true,
+                                y_train_pred,
+                                y_validate_true,
+                                y_validate_pred,
+                                *,
+                                labels=None,
+                                sample_weights=None,
+                                normalize=None,
+                                mode="validate",
+                                cbar=False,
+                                figsize=None,
+                                filepath=None):
 
+    cm_train = confusion_matrix(y_train_true,
+                                     y_train_pred,
+                                     sample_weight=sample_weights,
+                                     normalize=normalize)
 
-    cm_train = confusion_matrix(y_train_true, y_train_pred, sample_weight=sample_weights, normalize=normalize)
-    cm_validate = confusion_matrix(y_validate_true, y_validate_pred, normalize=normalize)
+    cm_validate = confusion_matrix(y_validate_true,
+                                        y_validate_pred,
+                                        normalize=normalize)
 
     cm_train_values = [f"{round(value, 2):.2f}" for value in cm_train.flatten()]
     cm_train_labels = np.asarray(cm_train_values).reshape(cm_train.shape[0], cm_train.shape[1])
@@ -289,7 +333,7 @@ def plot_confusion_matrices(y_train_true, y_train_pred,
     cm_validate_labels = np.asarray(cm_validate_values).reshape(cm_validate.shape[0], cm_validate.shape[1])
 
     if figsize is None:
-        figsize = (16, 7)
+        figsize = (13, 5)
 
     plt.rcParams['xtick.labelsize'] = 13
     plt.rcParams['ytick.labelsize'] = 13
@@ -301,96 +345,335 @@ def plot_confusion_matrices(y_train_true, y_train_pred,
     gs.update(wspace=0.4)
 
     ax1 = fig.add_subplot(gs[0,0])
-    sns.heatmap(cm_train, annot=cm_train_labels, fmt="", cmap="Blues", cbar=cbar, xticklabels=labels, yticklabels=labels, ax=ax1)
-    ax1.set(title="Confusion Matrix (Train)", ylabel = 'True Label', xlabel = 'Predicted Label')
+    sns.heatmap(cm_train,
+                   annot=cm_train_labels,
+                   fmt="",
+                   cmap="Blues",
+                   cbar=cbar,
+                   xticklabels=labels,
+                   yticklabels=labels,
+                   ax=ax1)
+
+    ax1.set(title="Confusion Matrix (Train)",
+             ylabel ='True Label',
+             xlabel ='Predicted Label')
 
     ax2 = fig.add_subplot(gs[0,1])
-    sns.heatmap(cm_validate, annot=cm_validate_labels, fmt="", cmap="Oranges", cbar=cbar, xticklabels=labels, yticklabels=labels, ax=ax2)
+    sns.heatmap(cm_validate,
+                   annot=cm_validate_labels,
+                   fmt="",
+                   cmap="Oranges",
+                   cbar=cbar,
+                   xticklabels=labels,
+                   yticklabels=labels,
+                   ax=ax2)
 
-    ax2.set(title="Confusion Matrix (Validation)", ylabel = 'True Label', xlabel = 'Predicted Label')
+    if mode == "validate":
+        title = "Confusion Matrix (Validation)"
+    elif mode == "test":
+        title = "Confusion Matrix (Test)"
 
-def plot_validation_curve(estimator, X_train, y_train, *, param_name, param_range, scoring, scoring_label, fit_params=None, cv=5, semilogx=False, n_jobs=-1):
-    from sklearn.model_selection import validation_curve
+    ax2.set(title=title,
+             ylabel ='True Label',
+             xlabel ='Predicted Label')
+
+    if filepath is not None:
+        fig.savefig(filepath)
+
+
+def plot_validation_curve(estimator,
+                             X_train,
+                             y_train,
+                             *,
+                             param_name,
+                             param_range,
+                             scoring,
+                             scoring_label,
+                             fit_params=None,
+                             cv=5,
+                             semilogx=False,
+                             n_jobs=-1,
+                             figsize=(16,12),
+                             filepath=None):
 
     estimator_name = str(estimator)
 
-    train_scores, test_scores = validation_curve(estimator, X_train, y_train,
-                                                 param_name=param_name,
-                                                 param_range=param_range,
-                                                 scoring=scoring,
-                                                 fit_params=fit_params,
-                                                 n_jobs=n_jobs)
+    train_scores, test_scores = validation_curve(estimator,
+                                                       X_train,
+                                                       y_train,
+                                                       param_name=param_name,
+                                                       param_range=param_range,
+                                                       scoring=scoring,
+                                                       fit_params=fit_params,
+                                                       cv=cv,
+                                                       n_jobs=n_jobs,
+                                                       verbose=2)
 
     avg_train_scores = np.array([np.average(train_scores[i,:]) for i in range(train_scores.shape[0])])
     avg_test_scores = np.array([np.average(test_scores[i,:]) for i in range(test_scores.shape[0])])
 
     plt.rcParams['axes.labelsize'] = 15
     plt.rcParams['axes.titlesize'] = 18
-    fig, ax = plt.subplots(figsize=(16,7))
+
+    fig, (ax1,ax2) = plt.subplots(figsize=figsize, nrows=2, ncols=1, sharex=True)
     if not semilogx:
-        ax.plot(param_range, avg_train_scores, param_range, avg_test_scores, param_range, np.abs(avg_train_scores - avg_test_scores), 'r--')
+        ax1.plot(param_range, avg_train_scores, param_range, avg_test_scores)
+        ax2.plot(param_range, np.abs(avg_train_scores - avg_test_scores), 'r--')
     else:
-        ax.semilogx(param_range, avg_train_scores, param_range, avg_test_scores, param_range, np.abs(avg_train_scores - avg_test_scores), 'r--')
-    ax.set(title=f'Validation Metrics vs {param_name} [{estimator_name}]',
-        xlabel=param_name,
-        ylabel=scoring_label,
-        ylim=(0,1))
-    ax.legend(['Train', 'Validate', 'Deviation'])
+        ax1.semilogx(param_range, avg_train_scores, param_range, avg_test_scores)
+        ax2.semilogx(param_range, np.abs(avg_train_scores - avg_test_scores), 'r--')
+
+    ax1.set(title=f'{scoring_label} vs {param_name} [{estimator_name}]',
+             ylabel=scoring_label)
+    ax2.set(xlabel=f'{param_name}',
+             ylabel=f'{scoring_label} Deviation')
+
+    ax1.legend(['Train', 'Validate'])
+
     plt.show()
 
-def _scale_bar_width(ax, factor):
+    if filepath is not None:
+        fig.savefig(filepath)
+
+
+def _scale_bar_width(ax, factor, *, horizontal=False):
     from math import isclose
-    sorted_patches = sorted(ax.patches, key=lambda x: x.get_x())
-    for i, patch in enumerate(sorted_patches):
-        current_width = patch.get_width()
 
-        updated_current_width = factor * current_width
-        patch.set_width(updated_current_width)
+    if not horizontal:
+        sorted_patches = sorted(ax.patches, key=lambda x: x.get_x())
+        for i, patch in enumerate(sorted_patches):
+            current_width = patch.get_width()
 
-        if i == len(sorted_patches) - 1:
-            return
+            updated_current_width = factor * current_width
+            patch.set_width(updated_current_width)
 
-        current_x = patch.get_x()
-        next_x = sorted_patches[i+1].get_x()
-        if isclose(current_x+current_width, next_x, rel_tol=1e-7, abs_tol=1e-7):
-            patch.set_x(next_x - updated_current_width)
+            if i == len(sorted_patches) - 1:
+                return
 
-def _get_validation_metric(train_metrics_dict , validate_metrics_dict, *, score_name, score_label, target_names):
+            current_x = patch.get_x()
+            next_x = sorted_patches[i+1].get_x()
+            if isclose(current_x + current_width, next_x, rel_tol=1e-7, abs_tol=1e-7):
+                patch.set_x(next_x - updated_current_width)
+    else:
+        sorted_patches = sorted(ax.patches, key=lambda x: x.get_y())
+        for i, patch in enumerate(sorted_patches):
+            current_width = patch.get_width()
+
+            updated_current_width = factor * current_width
+            patch.set_width(updated_current_width)
+
+            if i == len(sorted_patches) - 1:
+                return
+
+            current_y = patch.get_y()
+            next_y = sorted_patches[i+1].get_y()
+            if isclose(current_y + current_width, next_y, rel_tol=1e-7, abs_tol=1e-7):
+                patch.set_y(next_y - updated_current_width)
+
+
+def _get_validation_metric(train_metrics_dict,
+                               validate_metrics_dict,
+                               *,
+                               score_name,
+                               score_label,
+                               target_names,
+                               mode):
+
     train_metric_df = pd.DataFrame(train_metrics_dict).loc[score_name, target_names]
     train_metric_df.name = f"Train (Accuracy = ${round(train_metrics_dict['accuracy'], 3)}$)"
 
-    validate_metric_df = pd.DataFrame(validate_metrics_dict).loc[score_name,target_names]
-    validate_metric_df.name = f"Validate (Accuracy = ${round(validate_metrics_dict['accuracy'], 3)}$)"
+    validate_metric_df = pd.DataFrame(validate_metrics_dict).loc[score_name, target_names]
+    if mode == "validate":
+        validate_metric_df.name = f"Validate (Accuracy = ${round(validate_metrics_dict['accuracy'], 3)}$)"
+    if mode == "test":
+        validate_metric_df.name = f"Test (Accuracy = ${round(validate_metrics_dict['accuracy'], 3)}$)"
 
     return pd.concat([train_metric_df, validate_metric_df], axis=1).stack().reset_index().rename(columns={'level_0': 'Label', 'level_1': 'Dataset', 0: score_label})
 
 
-def plot_validation_metrics(y_train, y_train_pred, y_validate, y_validate_pred, *, score_names, target_names, estimator_label, sample_weight):
+def plot_validation_metrics_by_label(y_train,
+                                         y_train_pred,
+                                         y_validate,
+                                         y_validate_pred,
+                                         *,
+                                         score_names,
+                                         target_names,
+                                         estimator_label,
+                                         sample_weight,
+                                         mode="validate",
+                                         figsize=None,
+                                         filepath=None):
 
     N = len(score_names)
-    fig, axes = plt.subplots(figsize=(15,N*6), nrows=N)
 
-    train_metrics_dict = classification_report(y_train, y_train_pred, target_names=target_names, sample_weight=sample_weight, output_dict=True)
-    validate_metrics_dict = classification_report(y_validate, y_validate_pred, target_names=target_names, output_dict=True)
+    if figsize is None:
+        figsize = (11,N*5)
+    fig, axes = plt.subplots(figsize=figsize, nrows=N)
+    plt.rcParams['xtick.labelsize'] = 12
+    plt.rcParams['ytick.labelsize'] = 12
+    plt.rcParams['axes.labelsize'] = 16
+    plt.rcParams['axes.titlesize'] = 19
+
+    train_metrics_dict = classification_report(y_train,
+                                                    y_train_pred,
+                                                    target_names=target_names,
+                                                    sample_weight=sample_weight,
+                                                    output_dict=True)
+
+    validate_metrics_dict = classification_report(y_validate,
+                                                       y_validate_pred,
+                                                       target_names=target_names,
+                                                       output_dict=True)
 
     for i, score_name in enumerate(score_names):
+        if N == 1:
+            axes = [axes]
+
         if '-' in score_name:
             score_label = '-'.join([x.capitalize() for x in score_name.split('-')])
         else:
             score_label = score_name.capitalize()
-        score_df = _get_validation_metric(train_metrics_dict , validate_metrics_dict, score_name=score_name, score_label=score_label, target_names=target_names)
-        sns.barplot(x=score_df["Label"], y=score_df[score_label], hue=score_df["Dataset"], ax=axes[i])
+
+        score_df = _get_validation_metric(train_metrics_dict,
+                                               validate_metrics_dict,
+                                               score_name=score_name,
+                                               score_label=score_label,
+                                               target_names=target_names,
+                                               mode=mode)
+
+        sns.barplot(x=score_df["Label"],
+                      y=score_df[score_label],
+                      hue=score_df["Dataset"],
+                      ax=axes[i])
+
         axes[i].set(xlabel=None, ylim=(0,1))
         _scale_bar_width(axes[i], 0.55)
         axes[i].yaxis.set_major_locator(MultipleLocator(base=0.1))
         if i == 0:
-            axes[i].set(title=f"Validation Metrics by Label [{estimator_label}]")
-            axes[i].legend(loc="best")
+            if mode == "validate":
+                title = f"Validation Metrics by Label [{estimator_label}]"
+            elif mode == "test":
+                title = f"Test Metrics by Label [{estimator_label}]"
+            axes[i].set(title=title)
+            axes[i].legend(loc="best", prop={'size': 14}, ncol=2)
         else:
             axes[i].get_legend().remove()
 
-def get_classification_metrics(y_true, y_pred, *, target_names, sample_weight=None):
-    metrics_df = pd.DataFrame(classification_report(y_true, y_pred, target_names=target_names, sample_weight=sample_weight, output_dict=True)).loc["precision":"f1-score", ["NEGATIVE", "NEUTRAL", "POSITIVE", "weighted avg"]].apply(lambda x: round(x, 3))
+    if filepath is not None:
+        fig.savefig(filepath)
+
+
+def get_classification_metrics(y_true,
+                                   y_pred,
+                                   *,
+                                   target_names,
+                                   sample_weight=None,
+                                   average_only=False,
+                                   filepath=None):
+
+    metrics_dict = classification_report(y_true,
+                                             y_pred,
+                                             target_names=target_names,
+                                             sample_weight=sample_weight,
+                                             output_dict=True)
+
+    accuracy = round(metrics_dict["accuracy"], 3)
+    num_labels = len(target_names)
+
+    metrics_df = pd.DataFrame(metrics_dict)
+    target_names = list(target_names)
+    if sample_weight is not None:
+        target_names.append("weighted avg")
+        metrics_df = metrics_df.loc["precision":"f1-score", target_names].apply(lambda x: round(x, 3))
+        metrics_df.rename(columns={"weighted avg": "Weighted Average"}, inplace=True)
+    else:
+        target_names.append("macro avg")
+        metrics_df = metrics_df.loc["precision":"f1-score", target_names].apply(lambda x: round(x, 3))
+        metrics_df.rename(columns={"macro avg": "Average"}, inplace=True)
     metrics_df.index = ["Precision", "Recall", "F1-Score"]
-    metrics_df.columns = ["NEGATIVE", "NEUTRAL", "POSITIVE", "Weighted Average"]
+
+    metrics_df.loc["Accuracy", metrics_df.columns[num_labels:]] = accuracy
+
+    if average_only:
+        metrics_df = pd.DataFrame(metrics_df["Average"])
+
     return metrics_df
+
+
+
+def plot_history(model_name,
+                   history_dict,
+                   *,
+                   filepath=None):
+
+    training_loss_values = history_dict['loss']
+    validation_loss_values = history_dict['val_loss']
+    epochs = range(1, len(training_loss_values)+1)
+
+    training_accuracy_values = history_dict['accuracy']
+    validation_accuracy_values = history_dict['val_accuracy']
+    epochs = range(1, len(training_accuracy_values)+1)
+
+    fig, (ax1, ax2) = plt.subplots(figsize=(15,10), nrows=2, ncols=1, sharex=True)
+
+    ax1.plot(epochs, training_loss_values, 'tab:blue', label='Training Loss')
+    ax1.plot(epochs, validation_loss_values, 'tab:orange', label='Validation Loss')
+    ax1.set(title=f"History ({model_name})" , ylabel='Crossentropy Loss')
+
+    ax2.plot(epochs, training_accuracy_values, 'tab:blue', label='Training Accuracy')
+    ax2.plot(epochs, validation_accuracy_values, 'tab:orange', label='Validation Accuracy')
+    ax2.set(xlabel='Epochs', ylabel='Accuracy')
+
+    ax1.legend()
+    ax2.legend()
+    plt.show()
+
+    if filepath is not None:
+        fig.savefig(filepath)
+
+
+
+def get_english_stopwords():
+    stopwords = set()
+    with open("data/english_stopwords.txt") as file_iter:
+        for word in file_iter.readlines():
+            stopwords.add(word.strip())
+    return stopwords
+
+
+def get_corpus_stopwords(corpus,
+                             *,
+                             document_col,
+                             label_col,
+                             threshold=0.0001):
+
+    stopwords_by_label = {}
+    for label_name in corpus[label_col].unique():
+        label_frequency_dict = _get_document_frequencies(corpus,
+                                                                 document_col=document_col,
+                                                                 label_col=label_col,
+                                                                 label_name=label_name)
+
+        label_stopwords = {word for word in label_frequency_dict if label_frequency_dict[word] >= threshold}
+        stopwords_by_label[label_name] = label_stopwords
+    return reduce(lambda x,y: x&y, stopwords_by_label.values())
+
+
+def regex_scan(corpus,
+                 *,
+                 col_name,
+                 pattern,
+                 flags=None,
+                 append_to_corpus=False,
+                 new_col_name=None):
+
+    if flags is None:
+        pattern = re.compile(pattern)
+    else:
+        pattern = re.compile(pattern, flags=flags)
+    result_col = corpus[col_name].str.contains(pattern, na=False)
+    if not append_to_corpus:
+        return result_col
+    else:
+        assert isinstance(new_col_name, str)
+        corpus[new_col_name] = result_col
