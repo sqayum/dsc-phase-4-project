@@ -475,11 +475,13 @@ All of the approval ratings were gathered from a project that tracks Joe Biden's
 <center><img src="images/net-approval-ratings.png" width='1000'></center>
 
 
-> The figures above suggest that the `RNN 4` model was quite succesful in predicting the overall approval rating of Joe Biden. The predicted net approval rating deviated from the other sets of polling data by no more than $8\%$.
+> The figures above suggest that the `RNN 4` model was biased; it overestimated Biden's approval rating compared to all $10$ sets of polling data. However, the model shows some potential; for $7$ out of $10$ sets of polling data, `RNN` predicted a net approval rating differed by $10\%$ or less, indicating that the bias is not large.
+
+There is evidence suggesting that Twitter users in the United States are more likely to be Democrats than the general public[^2], which would explain  why `RNN 4` was biased towards overestimating Joe Biden's approval rating.
 
 #### **State Approval Ratings**
 
-The __net approval ratings__ for each state were sourced from the political forecasting website [*RacetotheWH*](https://www.racetothewh.com), using data gathered from a webpage that tracks Joe Biden's approval ratings in each state by aggregating a variety of opinion polls.[^2] For each of the $50$ states, a poll conducted during the same the *Test Corpus* was compiled (July 12, 2022 - July 19, 2022) was chosen. If a poll with such a date was not present, than the poll with closest associated date was chosen. **It should be noted that some of the smaller states had relatively few polls listed, which at times necessitated choosing a poll that had been conducted weeks before or after the time during which the *Test Corpus* was compiled.**
+The __net approval ratings__ for each state were sourced from the political forecasting website [*RacetotheWH*](https://www.racetothewh.com), using data gathered from a webpage that tracks Joe Biden's approval ratings in each state by aggregating a variety of opinion polls.[^3] For each of the $50$ states, a poll conducted during the same the *Test Corpus* was compiled (July 12, 2022 - July 19, 2022) was chosen. If a poll with such a date was not present, than the poll with closest associated date was chosen. **It should be noted that some of the smaller states had relatively few polls listed, which at times necessitated choosing a poll that had been conducted weeks before or after the time during which the *Test Corpus* was compiled.**
 
 The two maps below illustrate the net approval rating by state, as predicted by `RNN 4` and traditional polling data:
 
@@ -490,21 +492,20 @@ The two maps below illustrate the net approval rating by state, as predicted by 
 <center><img src="images/state-approval-map-from-polling-data.png" width='1000'></center>
 
 
-The following map shows how the state net approvals predicted via `RNN 4` deviated from the polling data. If a state is blue, it indicates that `RNN 4` overestimated the net approval rating in that state with respect to the polling data. Conversely, a red state indicates that `RNN 4` overestimated the net disapproval rating (or underestimated the net approval rate) in that state with respect to the polling data.
-
+The following map shows how the predictions made by `RNN 4` deviated from each state's polling data. **Red** means that state polls indicate a **lower net approval rate** than `RNN4`, while **Blue** means that state polls indicate a **higher net approval rate** than`RNN4`.
 
 <center><img src="images/state-approval-map-from-deviation.png" width='1000'></center>
 
 
 > The `RNN 4` model predicted statewide net approval ratings surprisingly well, considering that, on average, there were only about $435$ labeled observations per state. Its predictions deviated from polling data by $10\%$ or less in $27$ states, and by $15\%$ or less in $37$ states.
 
-The figure above highlights that `RNN 4` had a far greater tendency to overestimate the net approval rate in a given state. This discrepency is most notable in the political region known as the *Heartland/New South Alliance*, comprised of the American Heartland and New South regions.[^3] The states comprising this political region are:
+The figure above highlights that `RNN 4` had a far greater tendency to overestimate the net approval rate in a given state. This discrepency is most notable in the political region known as the *Heartland/New South Alliance*, comprised of the American Heartland and New South regions.[^4] The states comprising this political region are:
 
 * __American Heartland:__ North Dakota, South Dakota, Nebraska, Kansas, Oklahoma, Texas, Montana, Arizona, Colorado, Idaho, Wyoming, Utah, Nevada, New Mexico, Alaska
 
 * __New South:__ North Carolina, South Carolina, Georgia, Florida, Tennessee, Alabama, Mississippi, Arkansas, Louisiana
 
-With the exception of New Mexico, Arizona, Nevada, and Mississippi, all of the states in the *Heartland/New South Alliance* were predicted to have higher approval rates than what was suggested by the polling data. The states in the *Heartland/New South Alliance* characterized as such because they are more conservative than the rest of the country, and thus a liberal Democrat such as Joe Biden is likely to have a low approval rating by the general public residing in this region. This fact means it is likely the polling data is more accurate, which, in turn, means that the `RNN 4` model is biased towards higher approval ratings (lower disapproval ratings) in this region. This, most likely, implies that there was an insufficient number tweets from these states, which resulted in skewed datasets not accurately reflecting the opinions of the general population. There is some evidence to suggests that Twitter users in the United States are more likely to be Democrats than the general public[^4], which would explain the bias and why `RNN 4` had such a strong tendency to overestimate Joe Biden's approval rating.
+With the exception of New Mexico, Arizona, Nevada, and Mississippi, all of the states in the *Heartland/New South Alliance* were predicted to have higher approval rates than what was suggested by the polling data. The states in the *Heartland/New South Alliance* characterized as such because they are more conservative than the rest of the country, and thus a liberal Democrat such as Joe Biden is likely to have a low approval rating by the general public residing in this region. This fact means it is likely the polling data is more accurate, which, in turn, means that the `RNN 4` model is biased towards higher approval ratings (lower disapproval ratings) in this region. This, most likely, implies that there was an insufficient number tweets from these states, which resulted in skewed datasets not accurately reflecting the opinions of the general population. In addition, if `RNN4` is biased towards overestimating Biden's overall approval rate, then this same bias will affect its predictions on the state level.
 
 
 ## **Limitations**
@@ -653,6 +654,9 @@ Review the full analysis in the [Jupyter Notebook](./twitter-sentiment-analysis.
 
 
 [^1]: Silver, N. (2021, January 23). *How popular is Joe Biden?* FiveThirtyEight. Retrieved August 5, 2022, from https://projects.fivethirtyeight.com/biden-approval-rating/
-[^2]: Phillips, L. (n.d.). *How popular is Joe Biden?* Race to the WH. Retrieved September 6, 2022, from https://www.racetothewh.com/biden
-[^3]: Tarrance, L. (2018, June 25). *A New Regional Paradigm for Following U.S. Elections*. Gallup.Com. https://news.gallup.com/opinion/polling-matters/235838/new-regional-paradigm-following-elections.aspx
-[^4]: Hughes, A., &  Wojcik, S. (2019, April 24). *How Twitter Users Compare to the General Public*. Pew Research Center: Internet, Science & Tech. https://www.pewresearch.org/internet/2019/04/24/sizing-up-twitter-users/
+
+[^2]: Hughes, A., &  Wojcik, S. (2019, April 24). *How Twitter Users Compare to the General Public*. Pew Research Center: Internet, Science & Tech. https://www.pewresearch.org/internet/2019/04/24/sizing-up-twitter-users/
+
+[^3]: Phillips, L. (n.d.). *How popular is Joe Biden?* Race to the WH. Retrieved September 6, 2022, from https://www.racetothewh.com/biden
+
+[^4]: Tarrance, L. (2018, June 25). *A New Regional Paradigm for Following U.S. Elections*. Gallup.Com. https://news.gallup.com/opinion/polling-matters/235838/new-regional-paradigm-following-elections.aspx
